@@ -1,6 +1,7 @@
 import { createHmac } from "crypto";
-import { AuthRequest, AuthResponse, BankIdClient, BankIdExecutor, CollectResponse, PendingHintCode, SignRequest, SignResponse } from "../bankid";
-import BankIdStrategy from "./Strategy";
+import { AuthRequest, AuthResponse, BankIdClient, CollectResponse, PendingHintCode, SignRequest, SignResponse } from "../bankid";
+import BankIdStrategy, { IBankIdStrategyProps } from "./Strategy";
+import AuthenticationClient from "../authClients/AuthenticationClient";
 
 
 interface IClientEvent {
@@ -54,25 +55,21 @@ export class SSPendingEvent extends SSEvent<ISSPendingEvent> {
     }
 }
 
-export interface ISSSuccessEvent {
-    IdToken: string,
-    AccessToken: string,
-    RefreshToken: string,
-}
-export class SSSuccessEvent extends SSEvent<ISSSuccessEvent> {
+
+export class SSSuccessEvent<SuccessType> extends SSEvent<SuccessType> {
     type = "success";
-    constructor({IdToken, AccessToken, RefreshToken} : ISSSuccessEvent){
-        super({IdToken, AccessToken, RefreshToken});
+    constructor(props: SuccessType){
+        super(props);
     }
 }
 
 const orderRefHashKey = process.env.ORDER_REF_HASH_KEY || "default";
 
-interface ISSEStreamStrategyProps {
+interface ISSEStreamStrategyProps<SuccessType> extends IBankIdStrategyProps<SuccessType>{
     responseStream:NodeJS.WritableStream,
     options?: {
         maxEndTime?: number,
-    }
+    },
 }
 
 /**
@@ -102,8 +99,7 @@ interface ISSEStreamStrategyProps {
  * In this case, the browser is not likely to be throttled or killed, so we can keep sending events until the process is done.
  * 
  */
-export default class SSESTreamStrategy extends BankIdStrategy{
-    private used: boolean = false;
+export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<SuccessType>{
     private responseStream: NodeJS.WritableStream;
     protected authResponse: AuthResponse | undefined;
     protected authRequest : AuthRequest | undefined;
@@ -114,15 +110,15 @@ export default class SSESTreamStrategy extends BankIdStrategy{
     protected cancelOrder : () => void = () => {};
     private maxEndTime: number = 0;
 
-    constructor({responseStream, options}: ISSEStreamStrategyProps){
-        super();
+    constructor({responseStream, options, authClient, bankid}: ISSEStreamStrategyProps<SuccessType>){
+        super({authClient, bankid});
         this.responseStream = responseStream;
         if(options && options.maxEndTime){
             this.maxEndTime = options.maxEndTime;
         }
     }
 
-    private async handleAuthResponse(response: AuthResponse){
+    protected async handleAuthResponse(response: AuthResponse){
         console.log("Auth response", response);
         this.authResponse = response;
         const newOrderEvent = new SSNewOrderEvent({
@@ -134,7 +130,7 @@ export default class SSESTreamStrategy extends BankIdStrategy{
         })
         this.responseStream.write(newOrderEvent.toString());
     }
-    private async handleSignResponse(response: SignResponse){
+    protected async handleSignResponse(response: SignResponse){
         this.signResponse = response;
         const newOrderEvent = new SSNewOrderEvent({
             autoStartToken: response.autoStartToken,
@@ -151,7 +147,7 @@ export default class SSESTreamStrategy extends BankIdStrategy{
         this.responseStream.end();
     }
 
-    private async handleFailures(response: CollectResponse){
+    protected async handleFailures(response: CollectResponse){
         switch(response.hintCode){
             case 'expiredTransaction':
             case 'startFailed':
@@ -177,7 +173,7 @@ export default class SSESTreamStrategy extends BankIdStrategy{
         }
     }
 
-    private async handlePending(response: CollectResponse){
+    protected async handlePending(response: CollectResponse){
         const pendingEvent = new SSPendingEvent({
             hintCode: response.hintCode as PendingHintCode,
             qrCode: this.createQrCode(),
@@ -185,53 +181,44 @@ export default class SSESTreamStrategy extends BankIdStrategy{
         this.responseStream.write(pendingEvent.toString());
     }
 
-    private async handleComplete(response: CollectResponse){
-        const successEvent = new SSSuccessEvent({
-            IdToken: response.completionData.user,
-            AccessToken: response.completionData.device,
-            RefreshToken: response.completionData.device,
-        })
+    protected async handleComplete(response: CollectResponse){
+        const completionData = response.completionData;
+        if(!completionData){
+            throw new Error("No completion data");
+        }
+        const result = await this.authClient.run(completionData);
+        const successEvent = new SSSuccessEvent({result})
         this.closeConnection(successEvent);
     }
 
-
-
-    attach(client: BankIdClient){
-        if(this.bankid){
-            throw new Error("Already attached");
-        }
-        this.bankid =
-        client
-            .on('auth:start', this.handleAuthResponse.bind(this))
-            .on('sign:start', this.handleSignResponse.bind(this))
-            .on('collect:pending', this.handlePending.bind(this))
-            .on('collect:failed', this.handleFailures.bind(this))
-            .on('collect:complete', (response: CollectResponse) => {});
+    protected use() {
+        this.currentOrderStartTime = Date.now();
+        this.maxEndTime = this.currentOrderStartTime + 5 * 60 * 1000;
+        return super.use();
     }
 
     async authenticate(request: AuthRequest){
-        if(this.used){
-            throw new Error("Strategy already used");
-        }
-        this.used = true;
+        const bankid = this.use()
         this.authRequest = request;
-        this.currentOrderStartTime = Date.now();
-        this.maxEndTime = this.currentOrderStartTime + 5 * 60 * 1000;
-        this.cancelOrder = await this.bankid!.authenticateAndCollect(request);
+        this.cancelOrder = await bankid.authenticateAndCollect(request);
     }
 
     async sign(request: SignRequest){
-        if(this.used){
-            throw new Error("Strategy already used");
-        }
-        this.used = true;
+        const bankid = this.use()
         this.signRequest = request;
-        this.currentOrderStartTime = Date.now();
-        this.maxEndTime = this.currentOrderStartTime + 5 * 60 * 1000;
-        this.cancelOrder = await this.bankid!.signAndCollect(request);
+        this.cancelOrder = await bankid.signAndCollect(request);
     }
 
-    async resumeAuthentication(orderRef: string){
-        
+    /**
+     * Final collect
+     * 
+     * This method should be called whenever we expect that the user has finished authentication in the BankID app.
+     * This is only relevant for the case where the user is authenticating with only their phone and no QR code.
+     * @param orderRef 
+     */
+    async finalCollect(orderRef: string){
+        const bankid = this.use()
+        await bankid.finalCollect(orderRef);
+    }
 
 }

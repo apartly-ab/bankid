@@ -1,12 +1,19 @@
 import { createHmac } from "crypto";
 import { AuthRequest, AuthResponse, BankIdClient, CollectRequest, CollectResponse, SignRequest, SignResponse } from "../bankid";
+import AuthenticationClient from "../authClients/AuthenticationClient";
 
+export interface IBankIdStrategyProps<SuccessType> {
+    authClient: AuthenticationClient<SuccessType>,
+    bankid: BankIdClient
+}
 
-export default abstract class BankIdStrategy {
+export default abstract class BankIdStrategy<SuccessType> {
     protected abstract authRequest: AuthRequest | undefined;
     protected abstract signRequest: SignRequest | undefined;
     protected abstract authResponse: AuthResponse | undefined;
     protected abstract signResponse: SignResponse | undefined;
+    protected authClient: AuthenticationClient<SuccessType>;
+    protected used: boolean = false;
     protected abstract bankid: BankIdClient | undefined;
     protected abstract currentOrderStartTime: number;
     protected cleanUp: () => void = () => {};
@@ -23,6 +30,17 @@ export default abstract class BankIdStrategy {
         const code = `bankid.${response.qrStartToken}.${time}.${qrAuthCode}`;
         console.log("code", code)
         return code
+    }
+
+    protected use() : BankIdClient | never{
+        if(this.used){
+            throw new Error("Strategy already used");
+        }
+        this.used = true;
+        if(!this.bankid){
+            throw new Error("BankId client not attached");
+        }
+        return this.bankid;
     }
 
     protected abstract handleAuthResponse(response: AuthResponse): void;
@@ -65,6 +83,11 @@ export default abstract class BankIdStrategy {
 
     }
 
+    constructor({authClient, bankid} : IBankIdStrategyProps<SuccessType>){
+        this.authClient = authClient;
+        this.attach(bankid);
+    }
+
     /**
      * Renews the authentication order. This is mostly used when the user did not finish the order before it expired.
      * @returns void
@@ -88,4 +111,5 @@ export default abstract class BankIdStrategy {
         this.cancelOrder();
         this.cancelOrder = await this.bankid.signAndCollect(this.signRequest);
     }
+
 }

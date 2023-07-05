@@ -239,8 +239,6 @@ export type signResponseHandler = (
     response: SignResponse,
     ) => Promise<void>;
 
-
-
 export class RequestError extends Error {
   readonly request?: any;
 
@@ -349,6 +347,16 @@ export class BankIdClient extends EventEmitter {
     );
   }
 
+  /**
+   * Authenticate and collect
+   * 
+   * Initializes an authentication order with BankID and periodically collects the status of the order until it is complete or failed.
+   * It will also renew the authentication order if it expires and the maxEndTime has not been reached.
+   * 
+   * Whenever a collect call returns, the client will emit an event with the response.
+   * 
+   * @param parameters The parameters for the authentication request. [Read more](https://www.bankid.com/en/utvecklare/guider/teknisk-integrationsguide/graenssnittsbeskrivning/auth)
+   */
   async authenticateAndCollect(
     parameters: AuthRequest,
   ) {
@@ -357,6 +365,16 @@ export class BankIdClient extends EventEmitter {
     return this._awaitPendingCollect(authResponse.orderRef);
   }
 
+  /**
+   * Sign and collect
+   * 
+   * Initializes a signing order with BankID and periodically collects the status of the order until it is complete or failed.
+   * It will also renew the signing order if it expires and the maxEndTime has not been reached.
+   * 
+   * Whenever a collect call returns, the client will emit an event with the response.
+   * 
+   * @param parameters The parameters for the signing request. [Read more](https://www.bankid.com/en/utvecklare/guider/teknisk-integrationsguide/graenssnittsbeskrivning/sign)
+   */
   async signAndCollect(
     parameters: SignRequest,
     ) {
@@ -396,6 +414,19 @@ export class BankIdClient extends EventEmitter {
     };
   }
 
+  /**
+   * Helper method to finalize an authentication order. Only call when you expect that the order is complete.
+   **/
+  async finalCollect(orderRef: string) : Promise<CollectResponse> {
+    const response = await this.collect({ orderRef });
+    if (response.status === "complete") {
+      this.emit("collect:complete", response);
+    } else {
+      this.emit("collect:failed", response);
+    }
+    return response;
+  }
+  
 
   async _call<Req extends BankIdRequest, Res extends BankIdResponse>(
     method: BankIdMethod,
@@ -438,264 +469,9 @@ export class BankIdClient extends EventEmitter {
   }
 }
 
-
-
-export class BankIdExecutor extends EventEmitter {
-
-  private readonly bankid: BankIdClient;
-  private orderRef: string;
-  private readonly intervalLength: number;
-  private used = false;
-
-  
-
-
-    constructor({
-        bankid,
-        intervalLength = 1000,
-    }: {
-        bankid: BankIdClient,
-        intervalLength?: number,
-    }) {
-        super();
-        this.bankid = bankid;
-        this.intervalLength = intervalLength;
-    }
-
-    async authenticate(parameters: AuthRequest) {
-      if(this.used) {
-        throw new Error("BankIdExecutor instance already used");
-      }
-      this.used = true;
-      const authResponse = await this.bankid.authenticate(parameters);
-      this.orderRef = authResponse.orderRef;
-      this.emit("auth:start", authResponse);
-
-      
-      
-
-
-}
-
-
-/**
- * BankIdCollector
- * The BankIdCollector class is a helper class that keeps track of a timer and an order reference.
- * It is used to poll the BankId API for the status of an order.
- */
-class BankIdCollector {
-    private orderRef: string | undefined;
-    private readonly bankid: BankIdClient;
-    private timer: NodeJS.Timeout | undefined;
-    private collectCB: (response: CollectResponse) => void | undefined;
-    private readonly intervalLength: number;
-
-    constructor({
-        bankid, 
-        intervalLength = 1000,
-    }: {
-        bankid: BankIdClient, 
-        intervalLength?: number,}
-    ){
-        this.bankid = bankid;
-        this.intervalLength = intervalLength;
-    }
-
-    startCollecting(
-            orderRef: string,
-            collectCB: (response: CollectResponse) => void, 
-            ){
-        this.collectCB = collectCB;
-        this.orderRef = orderRef;
-
-        const timerId = setInterval(async () => {
-            const collectResponse = await this.bankid.collect({orderRef: this.orderRef});
-            if(this.orderRef !== collectResponse.orderRef){
-                return;
-            }
-            if(collectResponse.status === 'failed'){
-                clearInterval(timerId);
-                this.collectCB(collectResponse);
-                return;
-            }
-            if(collectResponse.status === 'complete'){
-                clearInterval(timerId);
-                this.collectCB(collectResponse);
-                return;
-            }
-            this.collectCB(collectResponse);
-        }, this.intervalLength);
-        this.timer = timerId;
-    }
-
-    stopCollecting(){
-        if(this.timer){
-            clearInterval(this.timer);
-        }
-    }
-
-}
-
-
 export type BankIdDevice = "sameMobile" | "otherMobile" | "sameDesktop";
 
-/**
- * BankIdHandler
- * 
- * The BankIdHandler class creates an interface between Lambda (or another serverless function provider) and the BankId API.
- * It uses the BankIdClient class to communicate with the BankId API and sends responses to the client using the ResponseStream class.
- * This means that we can periodically send events to the client rather than having the client poll for the order status.
- * 
- * While AWS Lambda (and other serverless function providers) is not typically used for long-running processes, this code is meant
- * to run for a maximum of 1-2 minutes, which is well within the limits of Lambda. 
- * If a user is slower than that, they will have to restart the process.
- */
-class BankIdHandler {
-    private readonly responseStream: ResponseStream;
-    private authResponse: AuthResponse | undefined;
-    private signResponse: SignResponse | undefined;
-    private latestOrderCreated: number = 0;
-    private startTime: number = 0;
-    private maxEndTime: number = 0;
-    private bankid: BankIdClient;
-    private bankIdDevice?: BankIdDevice;
-    private authRequest: AuthRequest | undefined;
-    private signRequest: SignRequest | undefined;
-    private collector: BankIdCollector;
 
-    constructor(bankid: BankIdClient, bankIdDevice: z.infer<typeof querySchema>['bankIdDevice']){
-        this.bankid = bankid;
-        this.collector = new BankIdCollector({bankid: this.bankid});
-        this.bankIdDevice = bankIdDevice;
-    }
-
-    // Self-collecting authenticate and signing methods ======================
-
-    async authenticateAndCollect(parameters: AuthRequest): Promise<void> {
-        "authenticateAndCollect entered in BankIdHandler"
-        this.startTime = Date.now();
-        this.authRequest = parameters;
-        this.maxEndTime = this.startTime + (maxTime * 1000);
-        setTimeout(() => {
-            const event = new SSFailureEvent({
-                reason: 'expiredTransaction'
-            });
-            this.collector.stopCollecting();
-            this.closeConnection(event);
-        }, maxTime * 1000);
-        const authResponse = await this.bankid.authenticate(parameters);
-        this.handleAuthResponse(authResponse);
-        this.collector.startCollecting(authResponse.orderRef, this.handleCollectResponse);
-        this.latestOrderCreated = Date.now();
-    }
-
-    async signAndCollect(parameters: SignRequest, ){
-        this.startTime = Date.now();
-        this.signRequest = parameters;
-        this.maxEndTime = this.startTime + (maxTime * 1000);
-        setTimeout(() => {
-            const event = new SSFailureEvent({
-                reason: 'expiredTransaction'
-            });
-            this.collector.stopCollecting();
-            this.closeConnection(event);
-        }, maxTime * 1000 - 4000);
-        const signResponse = await this.bankid.sign(parameters);
-        this.handleSignResponse(signResponse);
-        this.collector.startCollecting(signResponse.orderRef, this.handleCollectResponse);
-        this.latestOrderCreated = Date.now();
-    }
-
-    // ========================================================================
-
-    private createQrCode(){
-        const response = this.authResponse || this.signResponse;
-        if(!this.latestOrderCreated || !response){
-            console.log(this.latestOrderCreated)
-            return "";
-        }
-        const time = Math.floor(Date.now() - this.latestOrderCreated) / 1000;
-        const qrAuthCode = createHmac('sha256', response.qrStartSecret)
-            .update(time.toString())
-            .digest('hex');
-        const code = `bankid.${response.qrStartToken}.${time}.${qrAuthCode}`;
-        console.log("code", code)
-        return code
-    }
-
-    
-
-    
-    private async handleCollectResponse(response: CollectResponse){
-        console.log("Collect response", response);
-        if(response.status === 'complete'){
-            const event: IClientEvent = {
-                status: response.status,
-            };
-            this.responseStream.write(`event: complete\ndata: ${JSON.stringify(event)}\n\n`);
-            //this.responseStream.end();
-            return;
-        }
-        if(response.status === 'failed'){
-            await this.handleFailures(response);
-            return;
-        }
-        if(response.status === 'pending'){
-            if(response.hintCode === 'userSign' && this.bankIdDevice === "otherMobile"){
-                const event = new SSPendingEvent({
-                    hintCode: response.hintCode,
-                    qrCode: this.createQrCode(),
-                })
-                this.responseStream.write(event.toString());
-                // We end here, because we don't want to collect the finished order when the user has signed.
-                // Instead, when the user gets back to the browser, the client will send a request to the '/collect' endpoint.
-                this.responseStream.end();
-            }
-            const event = new SSPendingEvent({
-                hintCode: response.hintCode as PendingHintCode, 
-                qrCode: this.createQrCode(),
-            })
-            this.responseStream.write(event.toString());
-            return
-        }
-        const failureEvent = new SSFailureEvent({
-            reason: response.hintCode || 'unknown',
-        })
-        this.closeConnection(failureEvent);
-    }
-
-    // Renewing methods ==============================
-
-    async renewAuthentication(){
-        console.log("Renewing authentication")
-        if(!this.authResponse) throw new Error("No auth response saved");
-        if(!this.authRequest) throw new Error("No auth request created");
-        this.collector.stopCollecting();
-        await Promise.all([
-            this.bankid.cancel({orderRef: this.authResponse.orderRef}).catch(err => console.log("Error cancelling", err)),
-            this.authenticateAndCollect(this.authRequest)
-        ]);
-        this.latestOrderCreated = Date.now();
-    }
-
-    async renewSign(){
-        if(!this.signResponse) throw new Error("No sign response saved");
-        if(!this.signRequest) throw new Error("No sign request created");
-        this.collector.stopCollecting();
-        await Promise.all([
-            this.bankid.cancel({orderRef: this.signResponse.orderRef}).catch(err => console.log("Error cancelling", err)),
-            this.signAndCollect(this.signRequest)
-        ]);
-        this.latestOrderCreated = Date.now();
-    }
-
-    // ===============================================
-
-}
-
-
-}
-const bankid = new BankIdClient(props)
 
 const querySchema = z.object({
   action: z.enum(['authenticate', 'sign', 'finalize']),
@@ -704,6 +480,7 @@ const querySchema = z.object({
   signature: z.string(),
 });
 
+/**
 export const handler = streamifyResponse(async (event: APIGatewayProxyEventV2, responseStream : ResponseStream, context: APIGatewayEventRequestContextV2) => {
   try {
       const {action, bankIdDevice, time, signature} = querySchema.parse(event.queryStringParameters || {});
@@ -738,129 +515,4 @@ export const handler = streamifyResponse(async (event: APIGatewayProxyEventV2, r
   }
 }
 )
-
-class AuthHandler {
-  private readonly bankidHandler: BankIdHandler;
-  private readonly responseStream: ResponseStream;
-  private readonly cognito : CognitoIdentityProviderClient = new CognitoIdentityProviderClient({region: awsRegion});
-  constructor(bankidHandler: BankIdHandler, responseStream: ResponseStream){
-      this.bankidHandler = bankidHandler;
-      this.responseStream = responseStream;
-  }
-
-  async authenticateUser(collectResponse: CollectResponse){
-      if(!collectResponse.completionData) throw new Error("No completion data");
-      const {user} = collectResponse.completionData;
-      try{
-          const initiateAuthResponse = await this.cognito.send(new AdminInitiateAuthCommand({
-              AuthFlow: 'ADMIN_USER_PASSWORD_AUTH',
-              ClientId: cognitoClientId,
-              UserPoolId: cognitoUserPoolId,
-              AuthParameters: {
-                  USERNAME: user.personalNumber,
-                  PASSWORD: user.personalNumber,
-              }
-          }));
-      } catch(err){
-          console.log("Error", err);
-          if(err instanceof NotAuthorizedException){
-              const event: IClientEvent = {
-                  status: 'failed',
-                  hintCode: 'certificateErr',
-              }
-              this.responseStream.write(`event: failed\ndata: ${JSON.stringify(event)}\n\n`);
-              this.responseStream.end();
-              return;
-          }
-          throw err;
-      }
-  }
-
-  async checkUserExists(collectResponse: CollectResponse){
-      if(!collectResponse.completionData) throw new Error("No completion data");
-      const {user} = collectResponse.completionData;
-      try{
-          await this.cognito.send(new AdminGetUserCommand({
-              UserPoolId: cognitoUserPoolId,
-              Username: user.personalNumber,
-          }));
-          return true;
-      } catch(err){
-          console.log("Error", err);
-          if(err instanceof UserNotFoundException){
-              return false;
-          }
-          throw err;
-      }
-  }
-
-  generateCredentials(personalNumber: string){
-      return {
-          username: createHmac('sha256', usernameHashKey).update(personalNumber).digest('hex'),
-          password: createHmac('sha256', passwordHashKey).update(personalNumber).digest('hex'),
-      }
-  }
-
-
-  async createUser(collectResponse: CollectResponse){
-      if(!collectResponse.completionData) throw new Error("No completion data");
-      const {user} = collectResponse.completionData;
-      const {givenName, surname, personalNumber} = user;
-      const {username, password} = this.generateCredentials(personalNumber);
-      try {
-          await this.cognito.send(new AdminCreateUserCommand({
-              Username: username,
-              UserPoolId: cognitoUserPoolId,
-              UserAttributes: [
-                  {
-                      Name: 'given_name',
-                      Value: givenName,
-                  },
-                  {
-                      Name: 'family_name',
-                      Value: surname,
-                  },
-                  {
-                      Name: 'custom:personal_number',
-                      Value: personalNumber,
-                  },
-              ],
-          }));
-      } catch(err){
-          console.log("Error", err);
-          if(err instanceof UsernameExistsException){
-              const event: IClientEvent = {
-                  status: 'failed',
-              }
-              this.responseStream.write(`event: failed\ndata: ${JSON.stringify(event)}\n\n`);
-              this.responseStream.end();
-              return;
-          }
-          throw err;
-      }
-      try {
-          await this.cognito.send(new AdminSetUserPasswordCommand({
-              Password: password,
-              UserPoolId: cognitoUserPoolId,
-              Username: username,
-              Permanent: true,
-          }));
-      } catch(err){
-          console.log("Error", err);
-          if(err instanceof UserNotFoundException){
-              const event: IClientEvent = {
-                  status: 'failed',
-              }
-              this.responseStream.write(`event: failed\ndata: ${JSON.stringify(event)}\n\n`);
-              this.responseStream.end();
-              return;
-          }
-          throw err;
-      }
-  }
-
-  async signInUser(collectResponse: CollectResponse){
-  }
-      
-
-}
+*/

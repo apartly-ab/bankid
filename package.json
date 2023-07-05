@@ -13,13 +13,21 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/chai": "^4.3.5",
+    "@types/mocha": "^10.0.1",
     "@types/node": "^20.3.2",
+    "@types/sinon": "^10.0.15",
     "@typescript-eslint/eslint-plugin": "^5.60.1",
     "@typescript-eslint/parser": "^5.60.1",
+    "chai": "^4.3.7",
     "eslint": "^8.43.0",
+    "mocha": "^10.2.0",
+    "sinon": "^15.2.0",
     "typescript": "^5.1.6"
   },
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.363.0",
+    "@aws-sdk/client-secrets-manager": "^3.363.0",
     "axios": "^1.4.0",
     "zod": "^3.21.4"
   }
