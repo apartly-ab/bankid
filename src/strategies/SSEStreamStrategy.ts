@@ -2,11 +2,6 @@ import { createHmac } from "crypto";
 import { AuthRequest, AuthResponse, BankIdClient, CollectResponse, PendingHintCode, SignRequest, SignResponse } from "../bankid";
 import BankIdStrategy, { IBankIdStrategyProps } from "./Strategy";
 
-interface IClientEvent {
-    hintCode?: CollectResponse['hintCode'];
-    status: CollectResponse['status'];
-    qrCode?: string;
-}
 
 abstract class SSEvent<T> {
     abstract type: string;
@@ -14,7 +9,7 @@ abstract class SSEvent<T> {
     constructor(data: T){
         this.data = data;
     }
-    toString(){
+    stringify(){
         return `event: ${this.type}\ndata: ${this.data}\n\n`;
     }
 
@@ -132,7 +127,7 @@ export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<Succe
             qrCode: this.createQrCode(),
             hintCode: "outstandingTransaction",
         })
-        this.responseStream.write(newOrderEvent.toString());
+        this.responseStream.write(newOrderEvent.stringify());
     }
     protected async handleSignResponse(response: SignResponse){
         if(!this.orderRefHashKey){
@@ -147,11 +142,11 @@ export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<Succe
             qrCode: this.createQrCode(),
             hintCode: "outstandingTransaction",
         })
-        this.responseStream.write(newOrderEvent.toString());
+        this.responseStream.write(newOrderEvent.stringify());
     }
 
     private closeConnection<T extends SSEvent<object>>(event: T){
-        this.responseStream.write(event.toString());
+        this.responseStream.write(event.stringify());
         this.responseStream.end();
     }
 
@@ -194,7 +189,7 @@ export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<Succe
             hintCode: response.hintCode as PendingHintCode,
             qrCode: this.createQrCode(),
         })
-        this.responseStream.write(pendingEvent.toString());
+        this.responseStream.write(pendingEvent.stringify());
     }
 
     protected async handleComplete(response: CollectResponse){
