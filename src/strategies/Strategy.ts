@@ -40,6 +40,7 @@ export default abstract class BankIdStrategy<SuccessType> {
         }
         this.used = true;
         if(!this.bankid){
+            console.log(this)
             throw new Error("BankId client not attached");
         }
         return this.bankid;
