@@ -124,6 +124,7 @@ export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<Succe
         }
         console.log("Auth response", response);
         this.authResponse = response;
+        this.currentOrderStartTime = Date.now();
         const newOrderEvent = new SSNewOrderEvent({
             autoStartToken: response.autoStartToken,
             orderRef: response.orderRef,
@@ -138,6 +139,7 @@ export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<Succe
             throw new Error("No order ref hash key");
         }
         this.signResponse = response;
+        this.currentOrderStartTime = Date.now();
         const newOrderEvent = new SSNewOrderEvent({
             autoStartToken: response.autoStartToken,
             orderRef: response.orderRef,
