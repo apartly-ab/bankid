@@ -67,7 +67,8 @@ export default abstract class BankIdStrategy<SuccessType> {
         const handleComplete = this.handleComplete.bind(this);
         const handleFailures = this.handleFailures.bind(this);
 
-        this.bankid = client
+        this.bankid = client;
+        this.bankid
         .on("auth:start", handleAuthResponse)
         .on("sign:start", handleSignResponse)
         .on("collect:pending", handlePending)
@@ -77,22 +78,26 @@ export default abstract class BankIdStrategy<SuccessType> {
         console.log(this.bankid, "attached")
 
         this.cleanUp = () => {
-            this.bankid = undefined;
             console.log("detached")
-            client
+            if(!this.bankid){
+                return;
+            }
+            this.bankid
             .off("auth:start", handleAuthResponse)
             .off("sign:start", handleSignResponse)
             .off("collect:pending", handlePending)
             .off("collect:complete", handleComplete)
             .off("collect:failed", handleFailures)
+            this.bankid = undefined;
         }
 
     }
 
     constructor({authClient, bankid, device} : IBankIdStrategyProps<SuccessType>){
         this.authClient = authClient;
-        this.attach(bankid);
+        this.attach = this.attach.bind(this);
         this.use = this.use.bind(this);
+        this.attach(bankid);
         this.device = device;
     }
 
