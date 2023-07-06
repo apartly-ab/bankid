@@ -10,7 +10,7 @@ abstract class SSEvent<T> {
         this.data = data;
     }
     stringify(){
-        return `event: ${this.type}\ndata: ${this.data}\n\n`;
+        return `event: ${this.type}\ndata: ${JSON.stringify(this.data)}\n\n`;
     }
 
 }
