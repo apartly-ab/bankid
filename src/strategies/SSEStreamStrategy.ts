@@ -109,6 +109,7 @@ export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<Succe
     private maxEndTime: number = 0;
 
     constructor({responseStream, options, authClient, bankid, orderRefHashKey, device}: ISSEStreamStrategyProps<SuccessType>){
+        console.log("Creating SSE stream strategy")
         super({authClient, bankid, device});
         this.responseStream = responseStream;
         this.orderRefHashKey = orderRefHashKey;
