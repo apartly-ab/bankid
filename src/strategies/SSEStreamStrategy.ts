@@ -121,6 +121,9 @@ export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<Succe
     }
 
     protected async handleAuthResponse(response: AuthResponse){
+        if(!this.orderRefHashKey){
+            throw new Error("No order ref hash key");
+        }
         console.log("Auth response", response);
         this.authResponse = response;
         const newOrderEvent = new SSNewOrderEvent({
@@ -133,6 +136,9 @@ export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<Succe
         this.responseStream.write(newOrderEvent.toString());
     }
     protected async handleSignResponse(response: SignResponse){
+        if(!this.orderRefHashKey){
+            throw new Error("No order ref hash key");
+        }
         this.signResponse = response;
         const newOrderEvent = new SSNewOrderEvent({
             autoStartToken: response.autoStartToken,
