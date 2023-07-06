@@ -391,25 +391,29 @@ export class BankIdClient extends EventEmitter {
     const timer = setInterval(async () => {
         console.log("timer", randomNumber)
         try {
-            const response = await this.collect({ orderRef })
             if(cancel) {
                 return;
             }
+            const response = await this.collect({ orderRef })
             if (response.status === "complete") {
                 clearInterval(timer);
+                console.log("killed timer", randomNumber)
                 this.emit("collect:complete", response);
               } else if (response.status === "failed") {
                 clearInterval(timer);
+                console.log("killed timer", randomNumber)
                 this.emit("collect:failed", response);
               }
             this.emit("collect:pending", response);
         } catch (error) {
             clearInterval(timer);
+            console.log("killed timer", randomNumber)
             super.emit("collect:failed", error);
         }
     }, this.options.refreshInterval);
     return () => {
       clearInterval(timer)
+      console.log("killed timer", randomNumber)
       cancel = true;
     };
   }
