@@ -108,8 +108,8 @@ export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<Succe
     protected cancelOrder : () => void = () => {};
     private maxEndTime: number = 0;
 
-    constructor({responseStream, options, authClient, bankid, orderRefHashKey}: ISSEStreamStrategyProps<SuccessType>){
-        super({authClient, bankid});
+    constructor({responseStream, options, authClient, bankid, orderRefHashKey, device}: ISSEStreamStrategyProps<SuccessType>){
+        super({authClient, bankid, device});
         this.responseStream = responseStream;
         this.orderRefHashKey = orderRefHashKey;
         if(options && options.maxEndTime){
@@ -179,6 +179,14 @@ export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<Succe
     }
 
     protected async handlePending(response: CollectResponse){
+        if((response.hintCode === 'started' || response.hintCode === 'userSign') && this.device === 'sameMobile'){
+            const pendingEvent = new SSPendingEvent({
+                hintCode: response.hintCode as PendingHintCode,
+                qrCode: '',
+            })
+            this.closeConnection(pendingEvent);
+            return;
+        }
         const pendingEvent = new SSPendingEvent({
             hintCode: response.hintCode as PendingHintCode,
             qrCode: this.createQrCode(),
