@@ -61,6 +61,10 @@ export default abstract class BankIdStrategy<SuccessType> {
      * @param client 
     */
    attach(client: BankIdClient){
+        if(this.bankid){
+            throw new Error("Strategy already attached");
+        }
+
         const handleAuthResponse = this.handleAuthResponse.bind(this);
         const handleSignResponse = this.handleSignResponse.bind(this);
         const handlePending = this.handlePending.bind(this);
