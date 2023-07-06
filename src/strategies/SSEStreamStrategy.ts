@@ -2,6 +2,7 @@ import { createHmac } from "crypto";
 import { AuthRequest, AuthResponse, BankIdClient, CollectResponse, PendingHintCode, SignRequest, SignResponse } from "../bankid";
 import BankIdStrategy, { IBankIdStrategyProps } from "./Strategy";
 import AuthenticationClient from "../authClients/AuthenticationClient";
+import SecretStore from "../secretStores/SecretStore";
 
 
 interface IClientEvent {
@@ -63,13 +64,12 @@ export class SSSuccessEvent<SuccessType> extends SSEvent<SuccessType> {
     }
 }
 
-const orderRefHashKey = process.env.ORDER_REF_HASH_KEY || "default";
-
 interface ISSEStreamStrategyProps<SuccessType> extends IBankIdStrategyProps<SuccessType>{
     responseStream:NodeJS.WritableStream,
     options?: {
         maxEndTime?: number,
     },
+    orderRefHashKey: string
 }
 
 /**
@@ -105,14 +105,16 @@ export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<Succe
     protected authRequest : AuthRequest | undefined;
     protected signRequest : SignRequest | undefined;
     protected signResponse: SignResponse | undefined;
+    private orderRefHashKey: string | undefined;
     protected bankid: BankIdClient | undefined;
     protected currentOrderStartTime: number = 0;
     protected cancelOrder : () => void = () => {};
     private maxEndTime: number = 0;
 
-    constructor({responseStream, options, authClient, bankid}: ISSEStreamStrategyProps<SuccessType>){
+    constructor({responseStream, options, authClient, bankid, orderRefHashKey}: ISSEStreamStrategyProps<SuccessType>){
         super({authClient, bankid});
         this.responseStream = responseStream;
+        this.orderRefHashKey = orderRefHashKey;
         if(options && options.maxEndTime){
             this.maxEndTime = options.maxEndTime;
         }
@@ -124,7 +126,7 @@ export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<Succe
         const newOrderEvent = new SSNewOrderEvent({
             autoStartToken: response.autoStartToken,
             orderRef: response.orderRef,
-            orderRefHmac: createHmac('sha256', orderRefHashKey).update(response.orderRef).digest('hex'),
+            orderRefHmac: createHmac('sha256', this.orderRefHashKey).update(response.orderRef).digest('hex'),
             qrCode: this.createQrCode(),
             hintCode: "outstandingTransaction",
         })
@@ -135,7 +137,7 @@ export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<Succe
         const newOrderEvent = new SSNewOrderEvent({
             autoStartToken: response.autoStartToken,
             orderRef: response.orderRef,
-            orderRefHmac: createHmac('sha256', orderRefHashKey).update(response.orderRef).digest('hex'),
+            orderRefHmac: createHmac('sha256', this.orderRefHashKey).update(response.orderRef).digest('hex'),
             qrCode: this.createQrCode(),
             hintCode: "outstandingTransaction",
         })

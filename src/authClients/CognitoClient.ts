@@ -16,22 +16,35 @@ if(!userPoolId){
     throw new Error("COGNITO_USER_POOL_ID not set")
 }
 
+interface ICognitoAuthClientProps {
+    secretStore: SecretStore,
+    /** The name of the username hash key in the secret store*/
+    usernameHashKeyName: string,
+    /** The name of the password hash key in the secret store*/
+    passwordHashKeyName: string,
+}
+
 /**
  * Cognito authentication client.
  * This client is a plug-in for the BankID authentication service. Use it to connect your BankID service to a Cognito user pool.
+ * It must be provided with a secret store that contains the username and password hash keys.
+ * It also needs the *keys* to these keys in the secret store.
+ * This is a requirement so that the developer does not forget to add the keys to the secret store.
  */
 export default class CognitoAuthClient extends AuthenticationClient<AuthenticationResultType> {
     private cognito: CognitoIdentityProviderClient;
     private secretStore: SecretStore;
+    private usernameHashKeyName: string;
+    private passwordHashKeyName: string;
 
-    constructor({secretStore} : {
-        secretStore: SecretStore
-    }){
+    constructor({secretStore, usernameHashKeyName, passwordHashKeyName} : ICognitoAuthClientProps){
         super();
         this.cognito = new CognitoIdentityProviderClient({
             region: awsRegion
         })
         this.secretStore = secretStore;
+        this.usernameHashKeyName = usernameHashKeyName;
+        this.passwordHashKeyName = passwordHashKeyName;
     }
     protected async handleCompletion(data: CompletionData){
         const userExists = await this.checkUserExists(data);
@@ -43,13 +56,13 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
     }
 
     private async getUsername(data: CompletionData): Promise<string> {
-        const usernameHashKey = await this.secretStore.get("usernameHashKey");
+        const usernameHashKey = await this.secretStore.get(this.usernameHashKeyName);
         const username = createHmac("sha256", usernameHashKey).update(data.user.personalNumber).digest("hex");
         return username;
     }
 
     private async getPassword(data: CompletionData): Promise<string> {
-        const passwordHashKey = await this.secretStore.get("passwordHashKey");
+        const passwordHashKey = await this.secretStore.get(this.passwordHashKeyName);
         const password = createHmac("sha256", passwordHashKey).update(data.user.personalNumber).digest("hex");
         return password;
     }

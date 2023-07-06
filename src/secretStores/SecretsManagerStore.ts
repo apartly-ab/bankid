@@ -1,10 +1,8 @@
 import SecretStore from "./SecretStore";
 import {SecretsManagerClient, GetSecretValueCommand} from '@aws-sdk/client-secrets-manager'
 
-const awsRegion = process.env.AWS_REGION as string;
-
-if(!awsRegion){
-    throw new Error("AWS_REGION not set")
+interface ISecretsManagerStoreProps {
+    awsRegion: string,
 }
 
 /**
@@ -13,7 +11,7 @@ if(!awsRegion){
 export default class SecretsManagerStore extends SecretStore {
     private client: SecretsManagerClient;
 
-    constructor(){
+    constructor({awsRegion} : ISecretsManagerStoreProps){
         super();
         this.client = new SecretsManagerClient({
             region: awsRegion,
