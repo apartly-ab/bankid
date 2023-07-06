@@ -1,27 +1,19 @@
 import { CognitoIdentityProviderClient, AdminGetUserCommand, CognitoIdentityProviderServiceException, UserNotFoundException, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminInitiateAuthCommand, AuthenticationResultType } from "@aws-sdk/client-cognito-identity-provider";
 import { CompletionData } from "../bankid";
 import AuthenticationClient from "./AuthenticationClient";
-import SecretStore from "../secretStores/SecretStore";
 import { createHmac } from "crypto";
 
-const awsRegion = process.env.AWS_REGION as string;
-const userPoolId = process.env.COGNITO_USER_POOL_ID as string;
-const cognitoClientId = process.env.COGNITO_CLIENT_ID as string;
-
-
-if(!awsRegion){
-    throw new Error("AWS_REGION not set")
-}
-if(!userPoolId){
-    throw new Error("COGNITO_USER_POOL_ID not set")
-}
-
 interface ICognitoAuthClientProps {
-    secretStore: SecretStore,
     /** The name of the username hash key in the secret store*/
-    usernameHashKeyName: string,
+    usernameHashKey: string,
     /** The name of the password hash key in the secret store*/
-    passwordHashKeyName: string,
+    passwordHashKey: string,
+    /** The AWS region of the Cognito user pool */
+    awsRegion: string,
+    /** The ID of the Cognito user pool client*/
+    cognitoClientId: string,
+    /** The ID of the Cognito user pool */
+    userPoolId: string,
 }
 
 /**
@@ -33,18 +25,22 @@ interface ICognitoAuthClientProps {
  */
 export default class CognitoAuthClient extends AuthenticationClient<AuthenticationResultType> {
     private cognito: CognitoIdentityProviderClient;
-    private secretStore: SecretStore;
-    private usernameHashKeyName: string;
-    private passwordHashKeyName: string;
+    private usernameHashKey: string;
+    private passwordHashKey: string;
+    private awsRegion: string;
+    private userPoolId: string;
+    private cognitoClientId: string;
 
-    constructor({secretStore, usernameHashKeyName, passwordHashKeyName} : ICognitoAuthClientProps){
+    constructor({usernameHashKey, passwordHashKey, awsRegion, userPoolId, cognitoClientId} : ICognitoAuthClientProps){
         super();
         this.cognito = new CognitoIdentityProviderClient({
             region: awsRegion
         })
-        this.secretStore = secretStore;
-        this.usernameHashKeyName = usernameHashKeyName;
-        this.passwordHashKeyName = passwordHashKeyName;
+        this.usernameHashKey = usernameHashKey;
+        this.passwordHashKey = passwordHashKey;
+        this.awsRegion = awsRegion;
+        this.userPoolId = userPoolId;
+        this.cognitoClientId = cognitoClientId;
     }
     protected async handleCompletion(data: CompletionData){
         const userExists = await this.checkUserExists(data);
@@ -56,14 +52,12 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
     }
 
     private async getUsername(data: CompletionData): Promise<string> {
-        const usernameHashKey = await this.secretStore.get(this.usernameHashKeyName);
-        const username = createHmac("sha256", usernameHashKey).update(data.user.personalNumber).digest("hex");
+        const username = createHmac("sha256", this.usernameHashKey).update(data.user.personalNumber).digest("hex");
         return username;
     }
 
     private async getPassword(data: CompletionData): Promise<string> {
-        const passwordHashKey = await this.secretStore.get(this.passwordHashKeyName);
-        const password = createHmac("sha256", passwordHashKey).update(data.user.personalNumber).digest("hex");
+        const password = createHmac("sha256", this.passwordHashKey).update(data.user.personalNumber).digest("hex");
         return password;
     }
 
@@ -71,7 +65,7 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
         const username = await this.getUsername(data);
         const command = new AdminGetUserCommand({
             Username: username,
-            UserPoolId: userPoolId
+            UserPoolId: this.userPoolId
         })
         try {
             await this.cognito.send(command);
@@ -95,7 +89,7 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
 
         const createUserCommand = new AdminCreateUserCommand({
         Username: username,
-        UserPoolId: userPoolId,
+        UserPoolId: this.userPoolId,
         UserAttributes: [
             {
                 Name: "custom:personal_number",
@@ -115,7 +109,7 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
     
         const setPasswordCommand = new AdminSetUserPasswordCommand({
             Username: username,
-            UserPoolId: userPoolId,
+            UserPoolId: this.userPoolId,
             Password: password,
         })
         await this.cognito.send(setPasswordCommand);
@@ -125,8 +119,8 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
         const password = await this.getPassword(data);
 
         const command = new AdminInitiateAuthCommand({
-            UserPoolId: userPoolId,
-            ClientId: cognitoClientId,
+            UserPoolId: this.userPoolId,
+            ClientId: this.cognitoClientId,
             AuthFlow: "ADMIN_USER_PASSWORD_AUTH",
             AuthParameters: {
                 USERNAME: username,

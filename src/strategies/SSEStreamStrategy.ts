@@ -1,9 +1,6 @@
 import { createHmac } from "crypto";
 import { AuthRequest, AuthResponse, BankIdClient, CollectResponse, PendingHintCode, SignRequest, SignResponse } from "../bankid";
 import BankIdStrategy, { IBankIdStrategyProps } from "./Strategy";
-import AuthenticationClient from "../authClients/AuthenticationClient";
-import SecretStore from "../secretStores/SecretStore";
-
 
 interface IClientEvent {
     hintCode?: CollectResponse['hintCode'];
