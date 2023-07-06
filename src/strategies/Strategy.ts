@@ -25,7 +25,7 @@ export default abstract class BankIdStrategy<SuccessType> {
             console.log(this.currentOrderStartTime)
             return "";
         }
-        const time = Math.floor(Date.now() - this.currentOrderStartTime) / 1000;
+        const time = Math.floor(Date.now() - this.currentOrderStartTime / 1000);
         const qrAuthCode = createHmac('sha256', response.qrStartSecret)
             .update(time.toString())
             .digest('hex');

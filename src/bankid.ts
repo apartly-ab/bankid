@@ -395,6 +395,7 @@ export class BankIdClient extends EventEmitter {
                 return;
             }
             const response = await this.collect({ orderRef })
+            console.log(randomNumber, response.hintCode)
             if (response.status === "complete") {
                 clearInterval(timer);
                 console.log("killed timer", randomNumber)
