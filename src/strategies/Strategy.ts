@@ -73,8 +73,11 @@ export default abstract class BankIdStrategy<SuccessType> {
         .on("collect:complete", handleComplete)
         .on("collect:failed", handleFailures)
 
+        console.log(this.bankid, "attached")
+
         this.cleanUp = () => {
             this.bankid = undefined;
+            console.log("detached")
             client
             .off("auth:start", handleAuthResponse)
             .off("sign:start", handleSignResponse)
