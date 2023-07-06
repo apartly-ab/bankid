@@ -91,6 +91,7 @@ export default abstract class BankIdStrategy<SuccessType> {
     constructor({authClient, bankid, device} : IBankIdStrategyProps<SuccessType>){
         this.authClient = authClient;
         this.attach(bankid);
+        this.use = this.use.bind(this);
         this.device = device;
     }
 
