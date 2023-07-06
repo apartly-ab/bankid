@@ -97,7 +97,6 @@ export default abstract class BankIdStrategy<SuccessType> {
         this.authClient = authClient;
         this.attach = this.attach.bind(this);
         this.use = this.use.bind(this);
-        this.attach(bankid);
         this.device = device;
     }
 
