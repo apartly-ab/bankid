@@ -137,10 +137,11 @@ export default class PollingStrategy<SuccessType> {
         collectResponse: CollectResponse,
         retriesLeft: number,
     }): IPollResponse {
+        const now = Date.now();
         const junkableObject = {
-            nextPollTime: Date.now() + (this.pollInterval || 1000),
+            nextPollTime: now + (this.pollInterval || 1000),
             orderRef: authResponse.orderRef,
-            startTime: Date.now(),
+            startTime: now,
             retriesLeft,
             qrStartToken: authResponse.qrStartToken,
             qrStartSecret: authResponse.qrStartSecret,
@@ -155,13 +156,13 @@ export default class PollingStrategy<SuccessType> {
                 qrStartSecret: authResponse.qrStartSecret,
                 qrStartToken: authResponse.qrStartToken,
                 response: collectResponse,
-                startTime: Date.now(),
+                startTime: now,
             }),
             retriesLeft,
             status: collectResponse.status,
-            startTime: Date.now(),
+            startTime: now,
             qrStartToken: authResponse.qrStartToken,
-            nextPollTime: Date.now() + (this.pollInterval || 1000),
+            nextPollTime: now + (this.pollInterval || 1000),
             junk
         }
     }
@@ -175,10 +176,11 @@ export default class PollingStrategy<SuccessType> {
         collectResponse: CollectResponse,
         retriesLeft: number,
     }): IPollResponse {
+        const now = Date.now();
         const junkableObject = {
-            nextPollTime: Date.now() + (this.pollInterval || 1000),
+            nextPollTime: now + (this.pollInterval || 1000),
             orderRef: signResponse.orderRef,
-            startTime: Date.now(),
+            startTime: now,
             retriesLeft,
             qrStartToken: signResponse.qrStartToken,
             qrStartSecret: signResponse.qrStartSecret,
@@ -194,12 +196,12 @@ export default class PollingStrategy<SuccessType> {
                 qrStartSecret: signResponse.qrStartSecret,
                 qrStartToken: signResponse.qrStartToken,
                 response: collectResponse,
-                startTime: Date.now(),
+                startTime: now,
             }),
             retriesLeft,
-            startTime: Date.now(),
+            startTime: now,
             qrStartToken: signResponse.qrStartToken,
-            nextPollTime: Date.now() + (this.pollInterval || 1000),
+            nextPollTime: now + (this.pollInterval || 1000),
             junk
         }
     }
@@ -238,7 +240,7 @@ export default class PollingStrategy<SuccessType> {
             retriesLeft,
             startTime,
             qrStartToken,
-            nextPollTime: Date.now() + (this.pollInterval || 1000),
+            nextPollTime: junkableObject.nextPollTime,
             junk
         }
     }
