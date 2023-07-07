@@ -27,6 +27,10 @@ export interface IPollResponse {
     junk: string,
 }
 
+export interface ISuccessResponse<SuccessType> extends IPollResponse {
+    tokens: SuccessType,
+}
+
 export interface IPollRequest {
     orderRef: string,
     nextPollTime: number,
@@ -97,93 +101,167 @@ export default class PollingStrategy<SuccessType> {
         verifiedJunk?: IVerifiedJunk,
     }): IPollResponse {
         if(authResponse){
-            const junkableObject = {
-                nextPollTime: Date.now() + (this.pollInterval || 1000),
-                orderRef: authResponse.orderRef,
-                startTime: Date.now(),
+            return this.createAuthResponse({
+                authResponse,
+                collectResponse,
                 retriesLeft,
-                qrStartToken: authResponse.qrStartToken,
-                qrStartSecret: authResponse.qrStartSecret,
-                qrStartSecretEncryptionKey: this.qrStartSecretEncryptionKey,
-            }
-            const junk = this.createJunk(junkableObject);
-            return {
-                orderRef: authResponse.orderRef,
-                hintCode: collectResponse.hintCode,
-                qrCode: this.createQrCode({
-                    qrStartSecret: authResponse.qrStartSecret, 
-                    qrStartToken: authResponse.qrStartToken,
-                    response: collectResponse,
-                    startTime: Date.now(),
-                }),
-                retriesLeft,
-                startTime: Date.now(),
-                qrStartToken: authResponse.qrStartToken,
-                nextPollTime: Date.now() + (this.pollInterval || 1000),
-                junk
-            }
+            })
         }
         else if(signResponse){
-            const junkableObject = {
-                nextPollTime: Date.now() + (this.pollInterval || 1000),
-                orderRef: signResponse.orderRef,
-                startTime: Date.now(),
+            return this.createSignResponse({
+                signResponse,
+                collectResponse,
                 retriesLeft,
-                qrStartToken: signResponse.qrStartToken,
-                qrStartSecret: signResponse.qrStartSecret,
-                qrStartSecretEncryptionKey: this.qrStartSecretEncryptionKey,
-            }
-            const junk = this.createJunk(junkableObject);
-            return {
-                orderRef: signResponse.orderRef,
-                hintCode: collectResponse.hintCode,
-                qrCode: this.createQrCode({
-                    qrStartSecret: signResponse.qrStartSecret,
-                    qrStartToken: signResponse.qrStartToken,
-                    response: collectResponse,
-                    startTime: Date.now(),
-                }),
-                retriesLeft,
-                startTime: Date.now(),
-                qrStartToken: signResponse.qrStartToken,
-                nextPollTime: Date.now() + (this.pollInterval || 1000),
-                junk
-            }
+            })
         }
         else {
-            if(!verifiedJunk) throw new Error("No junk provided");
-            const {ivString, junk, nextPollTime, qrStartSecret, qrStartToken, retriesLeft, startTime} = verifiedJunk;
-            const junkableObject = {
-                nextPollTime: Date.now() + (this.pollInterval || 1000),
-                orderRef: collectResponse.orderRef,
-                startTime,
-                retriesLeft,
-                qrStartToken,
-                qrStartSecret,
-                qrStartSecretEncryptionKey: this.qrStartSecretEncryptionKey,
+            if(!verifiedJunk){
+                throw new Error("No junk provided")
             }
-            const newJunk = this.createJunk(junkableObject);
-
-
-            return {
-                orderRef: collectResponse.orderRef,
-                hintCode: collectResponse.hintCode,
-                qrCode: this.createQrCode({
-                    qrStartSecret,
-                    qrStartToken,
-                    response: collectResponse,
-                    startTime,
-                }),
+            return this.createCollectResponse({
+                collectResponse,
                 retriesLeft,
-                startTime,
-                qrStartToken,
-                nextPollTime: junkableObject.nextPollTime,
-                junk: newJunk
-            }
+                verifiedJunk,
+            })
+        }
+}
 
+    private createAuthResponse({
+        authResponse,
+        collectResponse,
+        retriesLeft
+    }: {
+        authResponse: AuthResponse,
+        collectResponse: CollectResponse,
+        retriesLeft: number,
+    }): IPollResponse {
+        const junkableObject = {
+            nextPollTime: Date.now() + (this.pollInterval || 1000),
+            orderRef: authResponse.orderRef,
+            startTime: Date.now(),
+            retriesLeft,
+            qrStartToken: authResponse.qrStartToken,
+            qrStartSecret: authResponse.qrStartSecret,
+            qrStartSecretEncryptionKey: this.qrStartSecretEncryptionKey,
+        }
+        const junk = this.createJunk(junkableObject);
+        return {
+            orderRef: authResponse.orderRef,
+            hintCode: collectResponse.hintCode,
+            qrCode: this.createQrCode({
+                qrStartSecret: authResponse.qrStartSecret,
+                qrStartToken: authResponse.qrStartToken,
+                response: collectResponse,
+                startTime: Date.now(),
+            }),
+            retriesLeft,
+            startTime: Date.now(),
+            qrStartToken: authResponse.qrStartToken,
+            nextPollTime: Date.now() + (this.pollInterval || 1000),
+            junk
+        }
     }
 
-}
+    private createSignResponse({
+        signResponse,
+        collectResponse,
+        retriesLeft
+    }: {
+        signResponse: SignResponse,
+        collectResponse: CollectResponse,
+        retriesLeft: number,
+    }): IPollResponse {
+        const junkableObject = {
+            nextPollTime: Date.now() + (this.pollInterval || 1000),
+            orderRef: signResponse.orderRef,
+            startTime: Date.now(),
+            retriesLeft,
+            qrStartToken: signResponse.qrStartToken,
+            qrStartSecret: signResponse.qrStartSecret,
+            qrStartSecretEncryptionKey: this.qrStartSecretEncryptionKey,
+        }
+        const junk = this.createJunk(junkableObject);
+        return {
+            orderRef: signResponse.orderRef,
+            hintCode: collectResponse.hintCode,
+            qrCode: this.createQrCode({
+                qrStartSecret: signResponse.qrStartSecret,
+                qrStartToken: signResponse.qrStartToken,
+                response: collectResponse,
+                startTime: Date.now(),
+            }),
+            retriesLeft,
+            startTime: Date.now(),
+            qrStartToken: signResponse.qrStartToken,
+            nextPollTime: Date.now() + (this.pollInterval || 1000),
+            junk
+        }
+    }
+
+    private createCollectResponse({
+        collectResponse,
+        retriesLeft,
+        verifiedJunk,
+    }: {
+        collectResponse: CollectResponse,
+        retriesLeft: number,
+        verifiedJunk: IVerifiedJunk,
+    }): IPollResponse {
+        const { startTime, qrStartToken, qrStartSecret } = verifiedJunk;
+        const junkableObject = {
+            nextPollTime: Date.now() + (this.pollInterval || 1000),
+            orderRef: collectResponse.orderRef,
+            startTime,
+            retriesLeft,
+            qrStartToken,
+            qrStartSecret,
+            qrStartSecretEncryptionKey: this.qrStartSecretEncryptionKey,
+        }
+        const junk = this.createJunk(junkableObject);
+        return {
+            orderRef: collectResponse.orderRef,
+            hintCode: collectResponse.hintCode,
+            qrCode: this.createQrCode({
+                qrStartSecret,
+                qrStartToken,
+                response: collectResponse,
+                startTime,
+            }),
+            retriesLeft,
+            startTime,
+            qrStartToken,
+            nextPollTime: Date.now() + (this.pollInterval || 1000),
+            junk
+        }
+    }
+
+    private async createCompleteResponse({
+        collectResponse,
+        verifiedJunk,
+    }: {
+        collectResponse: CollectResponse,
+        verifiedJunk: IVerifiedJunk,
+    }): Promise<ISuccessResponse<SuccessType>> {
+        const completionData = collectResponse.completionData;
+        if(!completionData){
+            throw new Error("No completion data provided");
+        }
+        const tokens = await this.authClient.run(completionData);
+        const { startTime, qrStartToken, qrStartSecret } = verifiedJunk;
+        return {
+            orderRef: "DONE",
+            hintCode: collectResponse.hintCode,
+            retriesLeft: 0,
+            qrCode: "",
+            startTime,
+            qrStartToken,
+            nextPollTime: Number.MAX_SAFE_INTEGER,
+            junk: "",
+            tokens,
+        }
+    }
+        
+
     /**
      * Do not be fooled by its name. This method creates an encrypted, hmacced string that contains the qrStartSecret, which must be kept secret from the client.
      * By sending this to the client, we can allow a fully stateless system, where the client is responsible for proving their right to collect the status of the order. Really, this is a hacked together version of a JWT with an encrypted payload.
@@ -336,7 +414,7 @@ export default class PollingStrategy<SuccessType> {
             case 'failed':
                 return await this.handleFailedResponse({response: collectResponse, verifiedJunk, ipAddress: request.ipAddress});
             case 'complete':
-                return this.createResponse({collectResponse, retriesLeft: 0, verifiedJunk});
+                return await this.createCompleteResponse({collectResponse, verifiedJunk});
             default:
                 return this.createResponse({collectResponse, verifiedJunk, retriesLeft: 0});
         }
