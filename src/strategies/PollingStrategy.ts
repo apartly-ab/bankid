@@ -1,6 +1,7 @@
-import { createCipheriv, createDecipheriv, createHmac, randomBytes,  } from "crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes,  } from "crypto";
 import { AuthenticationClient, BankIdClient } from "..";
 import { AuthResponse, SignResponse, CollectResponse, AuthRequest, SignRequest, CollectRequest, BankIdDevice } from "../bankid";
+import z from "zod";
 
 export interface IPollingStrategyProps<SuccessType>{
     options?: {
@@ -144,8 +145,9 @@ export default class PollingStrategy<SuccessType> {
             qrStartToken: authResponse.qrStartToken,
             qrStartSecret: authResponse.qrStartSecret,
             qrStartSecretEncryptionKey: this.qrStartSecretEncryptionKey,
+            orderRefHashKey: this.orderRefHashKey,
         }
-        const junk = this.createJunk(junkableObject);
+        const junk = createJunk(junkableObject);
         return {
             orderRef: authResponse.orderRef,
             hintCode: collectResponse.hintCode,
@@ -181,8 +183,9 @@ export default class PollingStrategy<SuccessType> {
             qrStartToken: signResponse.qrStartToken,
             qrStartSecret: signResponse.qrStartSecret,
             qrStartSecretEncryptionKey: this.qrStartSecretEncryptionKey,
+            orderRefHashKey: this.orderRefHashKey,
         }
-        const junk = this.createJunk(junkableObject);
+        const junk = createJunk(junkableObject);
         return {
             orderRef: signResponse.orderRef,
             hintCode: collectResponse.hintCode,
@@ -219,8 +222,9 @@ export default class PollingStrategy<SuccessType> {
             qrStartToken,
             qrStartSecret,
             qrStartSecretEncryptionKey: this.qrStartSecretEncryptionKey,
+            orderRefHashKey: this.orderRefHashKey,
         }
-        const junk = this.createJunk(junkableObject);
+        const junk = createJunk(junkableObject);
         return {
             orderRef: collectResponse.orderRef,
             hintCode: collectResponse.hintCode,
@@ -267,82 +271,7 @@ export default class PollingStrategy<SuccessType> {
     }
         
 
-    /**
-     * Do not be fooled by its name. This method creates an encrypted, hmacced string that contains the qrStartSecret, which must be kept secret from the client.
-     * By sending this to the client, we can allow a fully stateless system, where the client is responsible for proving their right to collect the status of the order. Really, this is a hacked together version of a JWT with an encrypted payload.
-     */
-    private createJunk({
-        nextPollTime,
-        orderRef,
-        retriesLeft,
-        encryptedQrStartSecret,
-        startTime,
-        ivString,
-        qrStartToken,
-        qrStartSecret,
-        qrStartSecretEncryptionKey,
-    }: {
-        nextPollTime: number,
-        orderRef: string,
-        encryptedQrStartSecret?: string,
-        startTime: number,
-        ivString?: string,
-        retriesLeft: number,
-        qrStartToken?: string,
-        qrStartSecret?: string,
-        qrStartSecretEncryptionKey: string,
-    }){
-        let encrypted = encryptedQrStartSecret || '';
-        if(!encryptedQrStartSecret){
-            if(!qrStartSecret) throw new Error("No qrStartSecret provided");
-            const iv = randomBytes(16);
-            ivString = iv.toString('hex');
-            const cipher = createCipheriv('aes-256-gcm', qrStartSecretEncryptionKey, iv);
-            encrypted += cipher.update(qrStartSecret, 'utf8', 'hex');
-            encrypted += cipher.final('hex');
-        }
-        const junkableItems = {
-            encryptedQrStartSecret,
-            ivString,
-            nextPollTime,
-            orderRef,
-            qrStartToken,
-            retriesLeft,
-            startTime,
-        }
-        const junkableString = `${junkableItems.encryptedQrStartSecret}${junkableItems.ivString}${junkableItems.nextPollTime}${junkableItems.orderRef}${junkableItems.qrStartToken}${junkableItems.retriesLeft}${junkableItems.startTime}`;
-        const hash = createHmac('sha256', this.orderRefHashKey).update(junkableString).digest('hex');
-        const junk = `${ivString}.${encrypted}.${hash}`
-        return junk;
-    }
 
-    private verifyJunk(order: IPollRequest){
-        const junk = order.junk.split('.');
-        if(junk.length !== 3) throw new Error("Invalid junk");
-        const [ivString, encryptedQrStartSecret, hash] = junk;
-        const junkableItems = {
-            encryptedQrStartSecret,
-            ivString,
-            nextPollTime: order.nextPollTime,
-            orderRef: order.orderRef,
-            qrStartToken: order.qrStartToken,
-            retriesLeft: order.retriesLeft,
-            startTime: order.startTime,
-        }
-        const junkableString = `${junkableItems.encryptedQrStartSecret}${junkableItems.ivString}${junkableItems.nextPollTime}${junkableItems.orderRef}${junkableItems.qrStartToken}${junkableItems.retriesLeft}${junkableItems.startTime}`;
-        const calculatedHash = createHmac('sha256', this.orderRefHashKey).update(junkableString).digest('hex');
-        if(calculatedHash !== hash) throw new Error("Invalid junk");
-        // Decrypt the qrStartSecret
-        const decipher = createDecipheriv('aes-256-gcm', this.qrStartSecretEncryptionKey, ivString);
-        let decrypted = decipher.update(encryptedQrStartSecret, 'hex', 'utf8');
-        decrypted += decipher.final('utf8');
-        return {
-            ...junkableItems,
-            junk: order.junk,
-            qrStartSecret: decrypted,
-        } as IVerifiedJunk;
-
-    }
 
     private async handleFailedResponse({response, verifiedJunk, ipAddress}: {
         response: CollectResponse,
@@ -403,13 +332,17 @@ export default class PollingStrategy<SuccessType> {
     }
 
     async collect(request: IPollRequest): Promise<IPollResponse> {
-        if(!this.verifyJunk(request)){
+        if(!verifyJunk({order: request, qrStartSecretEncryptionKey: this.qrStartSecretEncryptionKey, orderRefHashKey: this.orderRefHashKey})){
             throw new Error('Invalid poll request');
         }
         if(!this.bankid){
             throw new Error('BankID client not initialized');
         }
-        const verifiedJunk = this.verifyJunk(request);
+        const verifiedJunk = verifyJunk({
+            order: request, 
+            qrStartSecretEncryptionKey: this.qrStartSecretEncryptionKey, 
+            orderRefHashKey: this.orderRefHashKey
+        });
         const  {orderRef} = verifiedJunk;
         const collectResponse = await this.bankid.collect({orderRef});
         
@@ -425,4 +358,112 @@ export default class PollingStrategy<SuccessType> {
         }
     }
 }
+
+
+
+export const createJunkSchema = z.object({
+    nextPollTime: z.number(),
+    orderRef: z.string(),
+    retriesLeft: z.number(),
+    encryptedQrStartSecret: z.string().optional(),
+    startTime: z.number(),
+    ivString: z.string().optional(),
+    qrStartToken: z.string(),
+    qrStartSecret: z.string(),
+    qrStartSecretEncryptionKey: z.string(),
+    orderRefHashKey: z.string(),
+    tag: z.string().optional(),
+});
+
+
+    /**
+     * Do not be fooled by its name. This method creates an encrypted, hmacced string that contains the qrStartSecret, which must be kept secret from the client.
+     * By sending this to the client, we can allow a fully stateless system, where the client is responsible for proving their right to collect the status of the order. Really, this is a hacked together version of a JWT with an encrypted payload.
+     */
+    export function createJunk(props : z.infer<typeof createJunkSchema>): string {
+        let {
+            nextPollTime,
+            orderRef,
+            retriesLeft,
+            encryptedQrStartSecret,
+            startTime,
+            ivString,
+            qrStartToken,
+            qrStartSecret,
+            qrStartSecretEncryptionKey,
+            orderRefHashKey,
+            tag
+        } = createJunkSchema.parse(props);
+        let encrypted = encryptedQrStartSecret || '';
+        if(!encryptedQrStartSecret){
+            if(!qrStartSecret) throw new Error("No qrStartSecret provided");
+            const iv = randomBytes(16);
+            ivString = iv.toString('hex');
+            //Derive key
+            const key = createHash('sha256').update(qrStartSecretEncryptionKey).digest();
+            const cipher = createCipheriv('aes-256-gcm', key, iv);
+            encrypted += cipher.update(qrStartSecret, 'utf8', 'hex');
+            encrypted += cipher.final('hex');
+            tag = cipher.getAuthTag().toString('hex');
+            console.log("tag 1", tag)
+            console.log("encrypted", encrypted)
+        }
+        const junkableItems = {
+            encrypted,
+            ivString,
+            nextPollTime,
+            orderRef,
+            qrStartToken,
+            retriesLeft,
+            startTime,
+        }
+        const junkableString = `${junkableItems.encrypted}${junkableItems.ivString}${junkableItems.nextPollTime}${junkableItems.orderRef}${junkableItems.qrStartToken}${junkableItems.retriesLeft}${junkableItems.startTime}`;
+        console.log("junk 1", junkableItems, junkableString)
+        const hash = createHmac('sha256', orderRefHashKey).update(junkableString).digest('hex');
+        const junk = `${ivString}.${encrypted}.${hash}.${tag}`
+        return junk;
+    }
+
+    export function verifyJunk({
+        order, 
+        qrStartSecretEncryptionKey,
+        orderRefHashKey
+    }:{
+        order: IPollRequest,
+        qrStartSecretEncryptionKey: string,
+        orderRefHashKey: string,
+    }){
+        const junk = order.junk.split('.');
+        if(junk.length !== 4) throw new Error("Invalid junk");
+        const [ivString, encryptedQrStartSecret, hash, tag] = junk;
+        const junkableItems = {
+            encryptedQrStartSecret,
+            ivString,
+            nextPollTime: order.nextPollTime,
+            orderRef: order.orderRef,
+            qrStartToken: order.qrStartToken,
+            retriesLeft: order.retriesLeft,
+            startTime: order.startTime,
+        }
+        const junkableString = `${junkableItems.encryptedQrStartSecret}${junkableItems.ivString}${junkableItems.nextPollTime}${junkableItems.orderRef}${junkableItems.qrStartToken}${junkableItems.retriesLeft}${junkableItems.startTime}`;
+
+        console.log("junk 2", junkableItems, junkableString)
+        const calculatedHash = createHmac('sha256', orderRefHashKey).update(junkableString).digest('hex');
+
+        if(calculatedHash !== hash) throw new Error("Invalid junk");
+        // Decrypt the qrStartSecret
+        const key = createHash('sha256').update(qrStartSecretEncryptionKey).digest();
+        console.log("ivString", ivString)
+        const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(ivString, 'hex'));
+        decipher.setAuthTag(Buffer.from(tag, 'hex'));
+        console.log("tag 2", tag)
+        let decrypted = decipher.update(encryptedQrStartSecret, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+        return {
+            ...junkableItems,
+            junk: order.junk,
+            qrStartSecret: decrypted,
+        } as IVerifiedJunk;
+
+    }
 
