@@ -434,7 +434,7 @@ export const createJunkSchema = z.object({
         orderRefHashKey: string,
     }){
         const junk = order.junk.split('.');
-        if(junk.length !== 4) throw new Error("Invalid junk");
+        if(junk.length !== 4) throw new Error("Invalid junk: Wrong length");
         const [ivString, encryptedQrStartSecret, hash, tag] = junk;
         const junkableItems = {
             encryptedQrStartSecret,
@@ -450,7 +450,7 @@ export const createJunkSchema = z.object({
         console.log("junk 2", junkableItems, junkableString)
         const calculatedHash = createHmac('sha256', orderRefHashKey).update(junkableString).digest('hex');
 
-        if(calculatedHash !== hash) throw new Error("Invalid junk");
+        if(calculatedHash !== hash) throw new Error("Invalid junk: Hashes do not match: " + calculatedHash + " " + hash);
         // Decrypt the qrStartSecret
         const key = createHash('sha256').update(qrStartSecretEncryptionKey).digest();
         console.log("ivString", ivString)
