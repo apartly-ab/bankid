@@ -282,7 +282,7 @@ export default class PollingStrategy<SuccessType> {
     }): Promise<IPollResponse> {
         console.log("Handling failed response")
         switch(response.hintCode){
-            case 'expiredTransaction':
+            case 'startFailed':
                 {
                     if(verifiedJunk.retriesLeft <= 0){
                         console.log("retry limit reached")
@@ -290,10 +290,10 @@ export default class PollingStrategy<SuccessType> {
                     }
                     return await this.authenticate({request: {endUserIp: ipAddress}, retriesLeft: verifiedJunk.retriesLeft - 1});
                 }
+            case 'expiredTransaction':
             case 'certificateErr':
             case 'userCancel':
             case 'cancelled':
-            case 'startFailed':
             default:
                 console.log("Returning failed response")
                 return this.createResponse({collectResponse: response, retriesLeft: 0, verifiedJunk});
