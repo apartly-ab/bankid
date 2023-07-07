@@ -24,6 +24,7 @@ export interface IPollResponse {
     qrStartToken: string,
     autoStartToken?: string,
     nextPollTime: number,
+    status: CollectResponse['status'],
     junk: string,
 }
 
@@ -155,6 +156,7 @@ export default class PollingStrategy<SuccessType> {
                 startTime: Date.now(),
             }),
             retriesLeft,
+            status: collectResponse.status,
             startTime: Date.now(),
             qrStartToken: authResponse.qrStartToken,
             nextPollTime: Date.now() + (this.pollInterval || 1000),
@@ -184,6 +186,7 @@ export default class PollingStrategy<SuccessType> {
         return {
             orderRef: signResponse.orderRef,
             hintCode: collectResponse.hintCode,
+            status: collectResponse.status,
             qrCode: this.createQrCode({
                 qrStartSecret: signResponse.qrStartSecret,
                 qrStartToken: signResponse.qrStartToken,
@@ -221,6 +224,7 @@ export default class PollingStrategy<SuccessType> {
         return {
             orderRef: collectResponse.orderRef,
             hintCode: collectResponse.hintCode,
+            status: collectResponse.status,
             qrCode: this.createQrCode({
                 qrStartSecret,
                 qrStartToken,
@@ -251,6 +255,7 @@ export default class PollingStrategy<SuccessType> {
         return {
             orderRef: "DONE",
             hintCode: collectResponse.hintCode,
+            status: collectResponse.status,
             retriesLeft: 0,
             qrCode: "",
             startTime,
