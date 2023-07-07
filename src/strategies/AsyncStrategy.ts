@@ -2,13 +2,13 @@ import { createHmac } from "crypto";
 import { AuthRequest, AuthResponse, BankIdClient, CollectRequest, CollectResponse, SignRequest, SignResponse, BankIdDevice } from "../bankid";
 import AuthenticationClient from "../authClients/AuthenticationClient";
 
-export interface IBankIdStrategyProps<SuccessType> {
+export interface IAsyncBankIdStrategyProps<SuccessType> {
     authClient: AuthenticationClient<SuccessType>,
     bankid: BankIdClient,
     device: BankIdDevice
 }
 
-export default abstract class BankIdStrategy<SuccessType> {
+export default abstract class AsyncBankIdStrategy<SuccessType> {
     protected abstract authRequest: AuthRequest | undefined;
     protected abstract signRequest: SignRequest | undefined;
     protected abstract authResponse: AuthResponse | undefined;
@@ -97,7 +97,7 @@ export default abstract class BankIdStrategy<SuccessType> {
 
     }
 
-    constructor({authClient, bankid, device} : IBankIdStrategyProps<SuccessType>){
+    constructor({authClient, bankid, device} : IAsyncBankIdStrategyProps<SuccessType>){
         this.authClient = authClient;
         this.attach = this.attach.bind(this);
         this.use = this.use.bind(this);

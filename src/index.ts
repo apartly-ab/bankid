@@ -1,14 +1,15 @@
 import CognitoAuthClient from './authClients/CognitoClient';
 import AuthenticationClient from './authClients/AuthenticationClient';
 import SSESTreamStrategy, {SSFailureEvent, SSNewOrderEvent, SSPendingEvent, SSSuccessEvent, ISSFailureEvent, ISSNewOrderEvent, ISSPendingEvent} from './strategies/SSEStreamStrategy';
-import BankIdStrategy, {IBankIdStrategyProps} from './strategies/Strategy';
+import AsyncBankIdStrategy, {IAsyncBankIdStrategyProps} from './strategies/AsyncStrategy';
 import {BankIdClient} from './bankid'
+import PollingStrategy, {IPollRequest, IPollResponse, IPollingStrategyProps} from './strategies/PollingStrategy';
 
 export {
     CognitoAuthClient,
     AuthenticationClient,
     SSESTreamStrategy,
-    BankIdStrategy,
+    AsyncBankIdStrategy,
     BankIdClient,
     SSFailureEvent,
     SSNewOrderEvent,
@@ -17,5 +18,9 @@ export {
     ISSFailureEvent,
     ISSNewOrderEvent,
     ISSPendingEvent,
-    IBankIdStrategyProps
+    IAsyncBankIdStrategyProps,
+    IPollRequest,
+    IPollResponse,
+    IPollingStrategyProps,
+    PollingStrategy
 }

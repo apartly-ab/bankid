@@ -1,6 +1,6 @@
 import { createHmac } from "crypto";
 import { AuthRequest, AuthResponse, BankIdClient, CollectResponse, PendingHintCode, SignRequest, SignResponse } from "../bankid";
-import BankIdStrategy, { IBankIdStrategyProps } from "./Strategy";
+import AsyncBankIdStrategy, { IAsyncBankIdStrategyProps } from "./AsyncStrategy";
 
 
 abstract class SSEvent<T> {
@@ -56,7 +56,7 @@ export class SSSuccessEvent<SuccessType> extends SSEvent<SuccessType> {
     }
 }
 
-interface ISSEStreamStrategyProps<SuccessType> extends IBankIdStrategyProps<SuccessType>{
+interface ISSEStreamStrategyProps<SuccessType> extends IAsyncBankIdStrategyProps<SuccessType>{
     responseStream:NodeJS.WritableStream,
     options?: {
         maxEndTime?: number,
@@ -91,7 +91,7 @@ interface ISSEStreamStrategyProps<SuccessType> extends IBankIdStrategyProps<Succ
  * In this case, the browser is not likely to be throttled or killed, so we can keep sending events until the process is done.
  * 
  */
-export default class SSESTreamStrategy<SuccessType> extends BankIdStrategy<SuccessType>{
+export default class SSESTreamStrategy<SuccessType> extends AsyncBankIdStrategy<SuccessType>{
     private responseStream: NodeJS.WritableStream;
     protected authResponse: AuthResponse | undefined;
     protected authRequest : AuthRequest | undefined;
