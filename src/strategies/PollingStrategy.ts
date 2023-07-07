@@ -280,7 +280,7 @@ export default class PollingStrategy<SuccessType> {
         verifiedJunk: IVerifiedJunk,
         ipAddress: string,
     }): Promise<IPollResponse> {
-        console.log("Handling failed response")
+        console.log("Handling failed response", response)
         switch(response.hintCode){
             case 'startFailed':
                 {
