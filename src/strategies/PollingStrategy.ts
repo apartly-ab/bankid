@@ -301,7 +301,7 @@ export default class PollingStrategy<SuccessType> {
         return code
     }
 
-    async authenticate({request, retriesLeft}: {request: AuthRequest, retriesLeft: number}): Promise<IPollResponse> {
+    async authenticate({request, retriesLeft}: {request: AuthRequest, retriesLeft?: number}): Promise<IPollResponse> {
         if(!this.bankid){
             throw new Error('BankID client not initialized');
         }
@@ -310,13 +310,13 @@ export default class PollingStrategy<SuccessType> {
         return this.createResponse({collectResponse, authResponse, retriesLeft: retriesLeft ?? this.maxRetries});
     }
 
-    async sign({request}: {request: SignRequest, retriesLeft: number}): Promise<IPollResponse> {
+    async sign({request, retriesLeft}: {request: SignRequest, retriesLeft?: number}): Promise<IPollResponse> {
         if(!this.bankid){
             throw new Error('BankID client not initialized');
         }
         const signResponse = await this.bankid.sign(request);
         const collectResponse = await this.bankid.collect({orderRef: signResponse.orderRef});
-        return this.createResponse({collectResponse, signResponse, retriesLeft: this.maxRetries});
+        return this.createResponse({collectResponse, signResponse, retriesLeft: retriesLeft ?? this.maxRetries});
     }
 
     async collect(request: IPollRequest): Promise<IPollResponse> {
