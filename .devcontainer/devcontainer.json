@@ -6,7 +6,8 @@
             "extensions": [
 				"amazonwebservices.aws-toolkit-vscode",
 				"ms-azuretools.vscode-docker",
-				"GitHub.copilot-nightly"
+				"GitHub.copilot",
+                "GitHub.copilot-chat"
 			]
         }
     },

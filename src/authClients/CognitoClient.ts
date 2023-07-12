@@ -131,7 +131,7 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
         if(response.AuthenticationResult){
             return response.AuthenticationResult;
         }
-        throw new Error("No authentication result found")
+        throw new Error("No authentication result found" + JSON.stringify(response));
     }
 
     async run(data: CompletionData): Promise<AuthenticationResultType> {
