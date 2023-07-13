@@ -110,6 +110,18 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
             throw new Error("No result from createUser");
         }
         console.log("createUserResult", createUserResult);
+        // Set user password
+        const setPasswordCommand = new AdminSetUserPasswordCommand({
+            UserPoolId: this.userPoolId,
+            Username: username,
+            Password:"_"+password,
+            Permanent: true
+        })
+        const setPasswordResult = await this.cognito.send(setPasswordCommand);
+        if(!setPasswordResult){
+            throw new Error("No result from setPassword");
+        }
+        console.log("setPasswordResult", setPasswordResult);
 
         // Initiate auth, should prompt user to change password
         const initiateAuthCommand = new AdminInitiateAuthCommand({
@@ -118,7 +130,7 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
             AuthFlow: "ADMIN_NO_SRP_AUTH",
             AuthParameters: {
                 USERNAME: username,
-                PASSWORD: password,
+                PASSWORD: "_"+password,
             }
         })
 
