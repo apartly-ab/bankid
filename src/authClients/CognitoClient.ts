@@ -1,4 +1,4 @@
-import { CognitoIdentityProviderClient, AdminGetUserCommand, CognitoIdentityProviderServiceException, UserNotFoundException, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminInitiateAuthCommand, AuthenticationResultType } from "@aws-sdk/client-cognito-identity-provider";
+import { CognitoIdentityProviderClient, AdminGetUserCommand, CognitoIdentityProviderServiceException, UserNotFoundException, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminInitiateAuthCommand, AuthenticationResultType, AdminRespondToAuthChallengeCommand } from "@aws-sdk/client-cognito-identity-provider";
 import { CompletionData } from "../bankid";
 import AuthenticationClient from "./AuthenticationClient";
 import { createHmac } from "crypto";
@@ -83,7 +83,7 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
      * Creates a new user in a Cognito user pool, based on the data from BankID.
      * @param data 
      */
-    protected async createUser(data: CompletionData): Promise<void> {
+    protected async createUser(data: CompletionData) {
         const username = await this.getUsername(data);
         const password = await this.getPassword(data);
 
@@ -111,16 +111,52 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
         }
         console.log("createUserResult", createUserResult);
 
-        const setPasswordCommand = new AdminSetUserPasswordCommand({
-            Username: username,
+        // Initiate auth, should prompt user to change password
+        const initiateAuthCommand = new AdminInitiateAuthCommand({
             UserPoolId: this.userPoolId,
-            Password: password,
+            ClientId: this.cognitoClientId,
+            AuthFlow: "ADMIN_NO_SRP_AUTH",
+            AuthParameters: {
+                USERNAME: username,
+                PASSWORD: password,
+            }
         })
-        const setPasswordResult = await this.cognito.send(setPasswordCommand);
-        if(!setPasswordResult){
-            throw new Error("No result from setPassword");
+
+        const initiateAuthResult = await this.cognito.send(initiateAuthCommand);
+        if(!initiateAuthResult){
+            throw new Error("No result from initiateAuth");
         }
-        console.log("setPasswordResult", setPasswordResult);
+        console.log("initiateAuthResult", initiateAuthResult);
+
+        //We expect the CHALLENGE_NAME to be NEW_PASSWORD_REQUIRED
+        if(initiateAuthResult.ChallengeName !== "NEW_PASSWORD_REQUIRED"){
+            throw new Error("Unexpected challenge name: " + initiateAuthResult.ChallengeName);
+        }
+
+        // Set user password
+        const respondToAuthChallengeCommand = new AdminRespondToAuthChallengeCommand({
+            UserPoolId: this.userPoolId,
+            ClientId: this.cognitoClientId,
+            ChallengeName: "NEW_PASSWORD_REQUIRED",
+            ChallengeResponses: {
+                USERNAME: username,
+                NEW_PASSWORD: password,
+            },
+            Session: initiateAuthResult.Session
+        })
+
+        const respondToAuthChallengeResult = await this.cognito.send(respondToAuthChallengeCommand);
+        if(!respondToAuthChallengeResult){
+            throw new Error("No result from respondToAuthChallenge");
+        }
+        console.log("respondToAuthChallengeResult", respondToAuthChallengeResult);
+
+        //We expect authentication result to be present
+        if(!respondToAuthChallengeResult.AuthenticationResult){
+            throw new Error("No authentication result found");
+        }
+        return respondToAuthChallengeResult.AuthenticationResult;
+        
     }
     protected async signInUser(data: CompletionData): Promise<AuthenticationResultType> {
         const username = await this.getUsername(data);
@@ -148,8 +184,7 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
             return this.signInUser(data);
         }
         else{
-            await this.createUser(data);
-            return this.signInUser(data);
+            return this.createUser(data);
         }
     }
 }

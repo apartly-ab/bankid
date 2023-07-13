@@ -5,7 +5,7 @@ import { CompletionData } from "../bankid";
  */
 export default abstract class AuthenticationClient<T>{
     protected abstract checkUserExists(data: CompletionData) : Promise<boolean>;
-    protected abstract createUser(data: CompletionData) : Promise<void>;
+    protected abstract createUser(data: CompletionData) : Promise<T>;
     protected abstract signInUser(data: CompletionData): Promise<T>;
     abstract run(data: CompletionData): Promise<T>;
 }
