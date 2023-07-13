@@ -57,7 +57,7 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
     }
 
     private async getPassword(data: CompletionData): Promise<string> {
-        const password = createHmac("sha256", this.passwordHashKey).update(data.user.personalNumber).digest("hex");
+        const password = "_"+createHmac("sha256", this.passwordHashKey).update(data.user.personalNumber).digest("hex");
         return password;
     }
 
@@ -114,7 +114,7 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
         const setPasswordCommand = new AdminSetUserPasswordCommand({
             UserPoolId: this.userPoolId,
             Username: username,
-            Password:"_"+password,
+            Password: password,
             Permanent: true
         })
         const setPasswordResult = await this.cognito.send(setPasswordCommand);
@@ -130,7 +130,7 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
             AuthFlow: "ADMIN_NO_SRP_AUTH",
             AuthParameters: {
                 USERNAME: username,
-                PASSWORD: "_"+password,
+                PASSWORD: password,
             }
         })
 
