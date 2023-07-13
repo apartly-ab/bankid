@@ -105,14 +105,22 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
             },
         ]
         })
-        await this.cognito.send(createUserCommand);            
-    
+        const createUserResult = await this.cognito.send(createUserCommand);            
+        if(!createUserResult){
+            throw new Error("No result from createUser");
+        }
+        console.log("createUserResult", createUserResult);
+
         const setPasswordCommand = new AdminSetUserPasswordCommand({
             Username: username,
             UserPoolId: this.userPoolId,
             Password: password,
         })
-        await this.cognito.send(setPasswordCommand);
+        const setPasswordResult = await this.cognito.send(setPasswordCommand);
+        if(!setPasswordResult){
+            throw new Error("No result from setPassword");
+        }
+        console.log("setPasswordResult", setPasswordResult);
     }
     protected async signInUser(data: CompletionData): Promise<AuthenticationResultType> {
         const username = await this.getUsername(data);
