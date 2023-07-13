@@ -140,34 +140,11 @@ export default class CognitoAuthClient extends AuthenticationClient<Authenticati
         }
         console.log("initiateAuthResult", initiateAuthResult);
 
-        //We expect the CHALLENGE_NAME to be NEW_PASSWORD_REQUIRED
-        if(initiateAuthResult.ChallengeName !== "NEW_PASSWORD_REQUIRED"){
-            throw new Error("Unexpected challenge name: " + initiateAuthResult.ChallengeName);
-        }
-
-        // Set user password
-        const respondToAuthChallengeCommand = new AdminRespondToAuthChallengeCommand({
-            UserPoolId: this.userPoolId,
-            ClientId: this.cognitoClientId,
-            ChallengeName: "NEW_PASSWORD_REQUIRED",
-            ChallengeResponses: {
-                USERNAME: username,
-                NEW_PASSWORD: password,
-            },
-            Session: initiateAuthResult.Session
-        })
-
-        const respondToAuthChallengeResult = await this.cognito.send(respondToAuthChallengeCommand);
-        if(!respondToAuthChallengeResult){
-            throw new Error("No result from respondToAuthChallenge");
-        }
-        console.log("respondToAuthChallengeResult", respondToAuthChallengeResult);
-
         //We expect authentication result to be present
-        if(!respondToAuthChallengeResult.AuthenticationResult){
+        if(!initiateAuthResult.AuthenticationResult){
             throw new Error("No authentication result found");
         }
-        return respondToAuthChallengeResult.AuthenticationResult;
+        return initiateAuthResult.AuthenticationResult;
         
     }
     protected async signInUser(data: CompletionData): Promise<AuthenticationResultType> {
